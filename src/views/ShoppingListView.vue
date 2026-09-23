@@ -4,6 +4,8 @@ import { useShoppingListStore } from '@/stores/shoppingList'
 import { useMealPlanStore } from '@/stores/mealPlan'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseEmpty from '@/components/common/BaseEmpty.vue'
+import BaseTag from '@/components/common/BaseTag.vue'
+import { CATEGORY_ICONS, CATEGORY_COLORS } from '@/constants'
 
 const shopping = useShoppingListStore()
 const mealPlan = useMealPlanStore()
@@ -12,6 +14,7 @@ const selected = ref(new Set())
 
 const active = computed(() => shopping.activeItems)
 const purchased = computed(() => shopping.purchasedItems)
+const monthly = computed(() => shopping.monthlySummary)
 
 function toggle(id) {
   const s = new Set(selected.value)
@@ -85,6 +88,41 @@ function fmtDate(iso) {
       <div class="muted small">
         {{ purchased.map((i) => `${i.name} ${i.gap}${i.unit}`).join('、') }}
       </div>
+    </div>
+
+    <div v-if="shopping.history.length" class="card monthly">
+      <div class="section-title">
+        {{ monthly.month }}月采购小结
+        <span v-if="monthly.count" class="muted small">采购 {{ monthly.count }} 次 · 合计 ¥{{ monthly.total.toFixed(1) }}</span>
+      </div>
+
+      <div v-if="!monthly.count" class="muted small empty-month">本月还没有采购记录</div>
+
+      <template v-else>
+        <div v-if="monthly.topCategory" class="top-line">
+          <span class="muted small">花钱最多</span>
+          <BaseTag :category="monthly.topCategory">
+            {{ CATEGORY_ICONS[monthly.topCategory] }} {{ monthly.topCategory }}
+          </BaseTag>
+          <span class="muted small">占本月支出 {{ monthly.categories[0].percent.toFixed(0) }}%</span>
+        </div>
+
+        <div class="cat-bars">
+          <div v-for="c in monthly.categories" :key="c.category" class="cat-row">
+            <span class="cat-name" :class="{ top: c.category === monthly.topCategory }">
+              {{ CATEGORY_ICONS[c.category] || '📦' }} {{ c.category }}
+            </span>
+            <div class="bar">
+              <div
+                class="bar-fill"
+                :style="{ width: c.percent.toFixed(1) + '%', background: CATEGORY_COLORS[c.category] || '#90a4ae' }"
+              ></div>
+            </div>
+            <span class="cat-amount">¥{{ c.amount.toFixed(1) }}</span>
+            <span class="cat-percent muted">{{ c.percent.toFixed(0) }}%</span>
+          </div>
+        </div>
+      </template>
     </div>
 
     <div v-if="shopping.history.length" class="card">
@@ -177,5 +215,59 @@ function fmtDate(iso) {
 .total {
   font-weight: 600;
   color: var(--primary-dark);
+}
+.empty-month {
+  padding: 4px 0;
+}
+.top-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cat-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.cat-name {
+  width: 64px;
+  flex-shrink: 0;
+  color: var(--text-2);
+}
+.cat-name.top {
+  color: var(--text);
+  font-weight: 600;
+}
+.bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+.cat-amount {
+  width: 64px;
+  text-align: right;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.cat-percent {
+  width: 40px;
+  text-align: right;
+  font-size: 12px;
+  flex-shrink: 0;
 }
 </style>

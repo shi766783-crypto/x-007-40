@@ -30,6 +30,52 @@ export const useShoppingListStore = defineStore('shoppingList', {
         .filter((h) => new Date(h.date) >= start)
         .reduce((s, h) => s + Number(h.total || 0), 0)
     },
+    // 本月采购小结：次数、总额、按食材类别拆分
+    monthlySummary() {
+      const now = new Date()
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const inventory = useInventoryStore()
+
+      // 历史记录可能缺类别（旧数据），优先用记录里的类别，其次按名称/单位回查库存
+      const resolveCategory = (item) => {
+        if (item.category) return item.category
+        const stocked = inventory.items.find(
+          (i) => i.name === item.name && i.unit === item.unit,
+        )
+        return stocked?.category || '其他'
+      }
+
+      const catMap = {}
+      let count = 0
+      let total = 0
+      this.history
+        .filter((h) => new Date(h.date) >= start)
+        .forEach((h) => {
+          count += 1
+          ;(h.items || []).forEach((item) => {
+            const cat = resolveCategory(item)
+            const amount = Number(item.price || 0)
+            catMap[cat] = (catMap[cat] || 0) + amount
+            total += amount
+          })
+        })
+
+      const categories = Object.entries(catMap)
+        .map(([category, amount]) => ({
+          category,
+          amount,
+          percent: total ? (amount / total) * 100 : 0,
+        }))
+        .sort((a, b) => b.amount - a.amount)
+
+      return {
+        month: now.getMonth() + 1,
+        count,
+        total,
+        categories,
+        topCategory: categories[0]?.category || '',
+      }
+    },
     // 缺口总额（未采购项）
     totalGap: (state) =>
       state.items.filter((i) => !i.purchased).reduce((s, i) => s + Number(i.gap || 0), 0),
@@ -56,7 +102,8 @@ export const useShoppingListStore = defineStore('shoppingList', {
             id: uid('shop'),
             name: req.name,
             unit: req.unit,
-            ingredientId: req.ingredientId,
+            ingredientId: req.ingredientId || inStock?.id || null,
+            category: inStock?.category || '其他',
             required: req.required,
             inStock: available,
             gap,
@@ -91,7 +138,13 @@ export const useShoppingListStore = defineStore('shoppingList', {
         this.history.unshift({
           id: uid('purchase'),
           date: new Date().toISOString(),
-          items: targets.map((t) => ({ name: t.name, unit: t.unit, quantity: t.gap, price: t.price })),
+          items: targets.map((t) => ({
+            name: t.name,
+            unit: t.unit,
+            quantity: t.gap,
+            price: t.price,
+            category: t.category || '其他',
+          })),
           total,
         })
       }
