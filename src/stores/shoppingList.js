@@ -30,6 +30,41 @@ export const useShoppingListStore = defineStore('shoppingList', {
         .filter((h) => new Date(h.date) >= start)
         .reduce((s, h) => s + Number(h.total || 0), 0)
     },
+    // 本月采购记录
+    monthlyHistory() {
+      const now = new Date()
+      return this.history.filter((h) => {
+        const d = new Date(h.date)
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      })
+    },
+    // 本月花费
+    monthlySpend() {
+      return this.monthlyHistory.reduce((s, h) => s + Number(h.total || 0), 0)
+    },
+    // 本月采购金额按类别汇总（[{ category, amount, count }]，按金额降序）
+    monthlyCategorySummary() {
+      const inventory = useInventoryStore()
+      // 旧记录未存类别，按 名称+单位 / 名称 从当前库存反查兜底
+      const byNameUnit = {}
+      const byName = {}
+      inventory.items.forEach((i) => {
+        byNameUnit[`${i.name}|${i.unit}`] = i.category
+        if (!(i.name in byName)) byName[i.name] = i.category
+      })
+      const map = {}
+      this.monthlyHistory.forEach((h) => {
+        const items = h.items || []
+        items.forEach((it) => {
+          const category =
+            it.category || byNameUnit[`${it.name}|${it.unit}`] || byName[it.name] || '其他'
+          if (!map[category]) map[category] = { category, amount: 0, count: 0 }
+          map[category].amount += Number(it.price || 0)
+          map[category].count += 1
+        })
+      })
+      return Object.values(map).sort((a, b) => b.amount - a.amount)
+    },
     // 缺口总额（未采购项）
     totalGap: (state) =>
       state.items.filter((i) => !i.purchased).reduce((s, i) => s + Number(i.gap || 0), 0),
@@ -57,6 +92,7 @@ export const useShoppingListStore = defineStore('shoppingList', {
             name: req.name,
             unit: req.unit,
             ingredientId: req.ingredientId,
+            category: inStock ? inStock.category : '其他',
             required: req.required,
             inStock: available,
             gap,
@@ -91,7 +127,13 @@ export const useShoppingListStore = defineStore('shoppingList', {
         this.history.unshift({
           id: uid('purchase'),
           date: new Date().toISOString(),
-          items: targets.map((t) => ({ name: t.name, unit: t.unit, quantity: t.gap, price: t.price })),
+          items: targets.map((t) => ({
+            name: t.name,
+            unit: t.unit,
+            quantity: t.gap,
+            price: t.price,
+            category: t.category || '其他',
+          })),
           total,
         })
       }

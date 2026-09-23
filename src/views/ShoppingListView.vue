@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useShoppingListStore } from '@/stores/shoppingList'
 import { useMealPlanStore } from '@/stores/mealPlan'
+import { CATEGORY_ICONS, CATEGORY_COLORS } from '@/constants'
 import BaseButton from '@/components/common/BaseButton.vue'
 import BaseEmpty from '@/components/common/BaseEmpty.vue'
 
@@ -12,6 +13,29 @@ const selected = ref(new Set())
 
 const active = computed(() => shopping.activeItems)
 const purchased = computed(() => shopping.purchasedItems)
+
+// 本月采购小结
+const monthlyCount = computed(() => shopping.monthlyHistory.length)
+const monthlySpend = computed(() => shopping.monthlySpend)
+const catSummary = computed(() => shopping.monthlyCategorySummary)
+const catTotal = computed(() => catSummary.value.reduce((s, r) => s + r.amount, 0))
+// 占比最高的类别（金额为 0 时不标注）
+const topCategory = computed(() =>
+  catSummary.value.length && catTotal.value > 0 ? catSummary.value[0] : null,
+)
+
+function pctOf(amount) {
+  if (!catTotal.value) return 0
+  return Math.round((amount / catTotal.value) * 100)
+}
+
+function catIcon(category) {
+  return CATEGORY_ICONS[category] || '📦'
+}
+
+function catColor(category) {
+  return CATEGORY_COLORS[category] || '#90a4ae'
+}
 
 function toggle(id) {
   const s = new Set(selected.value)
@@ -89,6 +113,34 @@ function fmtDate(iso) {
 
     <div v-if="shopping.history.length" class="card">
       <div class="section-title">采购记录</div>
+
+      <div v-if="monthlyCount" class="month-summary">
+        <div class="ms-overview">
+          <span>本月采购 <b>{{ monthlyCount }}</b> 次 · 共 <b class="money">¥{{ monthlySpend.toFixed(1) }}</b></span>
+          <span v-if="topCategory" class="ms-top">
+            🏆 {{ catIcon(topCategory.category) }} {{ topCategory.category }} 占比最高（{{ pctOf(topCategory.amount) }}%）
+          </span>
+        </div>
+        <div class="cat-rows">
+          <div
+            v-for="row in catSummary"
+            :key="row.category"
+            class="cat-row"
+            :class="{ top: topCategory && row.category === topCategory.category }"
+          >
+            <span class="cat-name">
+              {{ catIcon(row.category) }} {{ row.category }}
+              <i v-if="topCategory && row.category === topCategory.category" class="crown">👑</i>
+            </span>
+            <div class="bar">
+              <div class="fill" :style="{ width: pctOf(row.amount) + '%', background: catColor(row.category) }"></div>
+            </div>
+            <span class="amount">¥{{ row.amount.toFixed(1) }}</span>
+            <span class="pct muted">{{ pctOf(row.amount) }}%</span>
+          </div>
+        </div>
+      </div>
+
       <div class="history">
         <div v-for="h in shopping.history" :key="h.id" class="hist-row">
           <span class="muted">{{ fmtDate(h.date) }}</span>
@@ -156,6 +208,81 @@ function fmtDate(iso) {
 .history {
   display: flex;
   flex-direction: column;
+}
+.month-summary {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.ms-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.ms-overview .money {
+  color: var(--primary-dark);
+}
+.ms-top {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 12px;
+}
+.cat-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.cat-row.top {
+  background: var(--warn-light);
+}
+.cat-name {
+  width: 76px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cat-row.top .cat-name {
+  font-weight: 600;
+}
+.crown {
+  font-style: normal;
+  font-size: 12px;
+}
+.bar {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fill {
+  height: 100%;
+  border-radius: 4px;
+}
+.amount {
+  width: 64px;
+  text-align: right;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+.pct {
+  width: 38px;
+  text-align: right;
+  font-size: 12px;
 }
 .hist-row {
   display: flex;
